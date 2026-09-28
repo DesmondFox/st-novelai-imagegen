@@ -1,0 +1,8 @@
+{
+    "name": "st-novelai-imagegen",
+    "version": "1.0.0",
+    "description": "SillyTavern server plugin + extension: NovelAI V4.5/V5 image generation with multi-character prompts",
+    "type": "module",
+    "main": "plugin.mjs",
+    "license": "MIT"
+}

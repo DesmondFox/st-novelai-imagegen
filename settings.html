@@ -1,0 +1,102 @@
+<div id="nai_ig_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>NovelAI Image Gen (V4.5/V5)</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <div id="nai_ig_plugin_status" class="nai-ig-hint"></div>
+            <div class="nai-ig-hint">Токен берётся из API Connections → NovelAI.</div>
+
+            <h4>Модель</h4>
+            <div class="nai-ig-row">
+                <label>Модель
+                    <select id="nai_ig_model" class="text_pole">
+                        <option value="nai-diffusion-5-full">V5 Full</option>
+                        <option value="nai-diffusion-5-curated">V5 Curated</option>
+                        <option value="nai-diffusion-4-5-full">V4.5 Full</option>
+                        <option value="nai-diffusion-4-5-curated">V4.5 Curated</option>
+                        <option value="nai-diffusion-4-full">V4 Full</option>
+                    </select>
+                </label>
+                <label class="checkbox_label" title="Добавляет «fur dataset» в начало промпта (как лапка в веб-интерфейсе NAI)">
+                    <input id="nai_ig_furry" type="checkbox" />
+                    Furry mode
+                </label>
+            </div>
+
+            <h4>Параметры</h4>
+            <div class="nai-ig-row">
+                <label>Ориентация
+                    <select id="nai_ig_orientation" class="text_pole">
+                        <option value="portrait">Портрет 832×1216</option>
+                        <option value="landscape">Альбом 1216×832</option>
+                        <option value="square">Квадрат 1024×1024</option>
+                    </select>
+                </label>
+                <label>Steps <input id="nai_ig_steps" type="number" class="text_pole" min="1" max="50" /></label>
+                <label>CFG <input id="nai_ig_scale" type="number" class="text_pole" min="0" max="10" step="0.1" /></label>
+                <label>CFG rescale <input id="nai_ig_cfg_rescale" type="number" class="text_pole" min="0" max="1" step="0.02" /></label>
+            </div>
+            <div class="nai-ig-row">
+                <label>Sampler
+                    <select id="nai_ig_sampler" class="text_pole">
+                        <option value="k_euler_ancestral">Euler Ancestral</option>
+                        <option value="k_euler">Euler</option>
+                        <option value="k_dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
+                        <option value="k_dpmpp_2m_sde">DPM++ 2M SDE</option>
+                        <option value="k_dpmpp_2m">DPM++ 2M</option>
+                        <option value="k_dpmpp_sde">DPM++ SDE</option>
+                    </select>
+                </label>
+                <label>Noise schedule
+                    <select id="nai_ig_noise_schedule" class="text_pole">
+                        <option value="karras">karras</option>
+                        <option value="exponential">exponential</option>
+                        <option value="polyexponential">polyexponential</option>
+                    </select>
+                </label>
+                <label>Seed (-1 = случайный) <input id="nai_ig_seed" type="number" class="text_pole" /></label>
+            </div>
+            <div class="nai-ig-row">
+                <label class="checkbox_label"><input id="nai_ig_variety_boost" type="checkbox" /> Variety Boost (только V4/V4.5)</label>
+                <label class="checkbox_label"><input id="nai_ig_decrisper" type="checkbox" /> Decrisper</label>
+            </div>
+            <div class="nai-ig-hint">На Opus бесплатно: 1 картинка, ≤ 1024×1024 по площади, ≤ 28 steps.</div>
+
+            <h4>Теги</h4>
+            <label>Quality-теги (в конец промпта)
+                <textarea id="nai_ig_quality" class="text_pole" rows="2"></textarea>
+            </label>
+            <label>Негативный промпт
+                <textarea id="nai_ig_negative" class="text_pole" rows="3"></textarea>
+            </label>
+
+            <h4>Внешность персонажей</h4>
+            <div class="nai-ig-hint">Теги подставляются автоматически, когда персонаж попадает на картинку (по имени). Хранятся в карточке персонажа.</div>
+            <label>Персонаж чата
+                <select id="nai_ig_char_select" class="text_pole"></select>
+                <textarea id="nai_ig_char_tags" class="text_pole" rows="2" placeholder="1girl, fox girl, orange hair, green eyes, ..."></textarea>
+            </label>
+            <label>Ваша персона
+                <textarea id="nai_ig_user_tags" class="text_pole" rows="2" placeholder="1boy, black hair, ..."></textarea>
+            </label>
+
+            <h4>Tool для LLM</h4>
+            <div class="nai-ig-row">
+                <label class="checkbox_label"><input id="nai_ig_tool" type="checkbox" /> Разрешить LLM вызывать генерацию</label>
+                <label>Макс. картинок за вызов <input id="nai_ig_max_count" type="number" class="text_pole" min="1" max="8" /></label>
+            </div>
+
+            <h4>Автосцена</h4>
+            <label>Инструкция для LLM (сколько сообщений чата она видит, решает ваш контекст)
+                <textarea id="nai_ig_scene_instruction" class="text_pole" rows="6"></textarea>
+            </label>
+            <div class="nai-ig-row">
+                <div id="nai_ig_btn_scene" class="menu_button">Сгенерировать сцену</div>
+                <div id="nai_ig_btn_balance" class="menu_button">Проверить Anlas</div>
+                <div id="nai_ig_btn_reset" class="menu_button">Сбросить инструкцию</div>
+            </div>
+        </div>
+    </div>
+</div>

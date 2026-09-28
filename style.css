@@ -1,0 +1,28 @@
+#nai_ig_settings .nai-ig-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+#nai_ig_settings .nai-ig-row > label {
+    flex: 1 1 140px;
+}
+
+#nai_ig_settings input[type="number"] {
+    width: 100%;
+}
+
+#nai_ig_settings textarea {
+    width: 100%;
+    font-size: 0.9em;
+}
+
+#nai_ig_settings .nai-ig-hint {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+#nai_ig_settings h4 {
+    margin: 10px 0 4px;
+}

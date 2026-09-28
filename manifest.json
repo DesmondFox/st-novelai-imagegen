@@ -1,0 +1,11 @@
+{
+    "display_name": "NovelAI Image Gen (V4.5/V5)",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "DesmondFox",
+    "version": "1.0.0",
+    "homePage": "https://github.com/DesmondFox/st-novelai-imagegen"
+}
