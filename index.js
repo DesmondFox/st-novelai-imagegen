@@ -25,6 +25,8 @@ Rules:
 - Do not add art style, medium or artist tags (anime, realistic, sketch, watercolor, chibi, ...): the style is set separately.
 - Tags only, English, no sentences.]`;
 
+const REQUEST_INSTRUCTION = `[Picture request from the user: "{{nai_request}}". Draw exactly this instead of the current moment. Take places, objects and characters' looks from the story. Add characters only if the request needs them; "characters" may be []. If nobody is visible, put "no humans" in "prompt".]`;
+
 const EXTRACT_SYSTEM_PROMPT = `Convert the character description into NovelAI appearance tags. Reply with one line of comma-separated English Danbooru tags and nothing else. Tags to include: ${APPEARANCE_SCOPE}`;
 
 const UPDATE_INSTRUCTION = `[Pause the roleplay. Saved appearance tags of {{nai_name}}: {{nai_tags}}
@@ -383,9 +385,16 @@ function parseSceneJson(text) {
     };
 }
 
-async function generateScene({ count, orientation } = {}) {
+/**
+ * @param {object} [opts]
+ * @param {string} [opts.request] What to draw instead of the current moment ("our house", "the letter on the table").
+ */
+async function generateScene({ count, orientation, request } = {}) {
     const c = ctx();
-    const instruction = c.substituteParams(settings().scene_instruction.replaceAll('{{nai_names}}', savedAppearanceNames()));
+    let instruction = settings().scene_instruction.replaceAll('{{nai_names}}', savedAppearanceNames());
+    // Appended after the editable instruction so it works with any saved instruction; a function replacer keeps '$' in the text literal.
+    if (request?.trim()) instruction += '\n' + REQUEST_INSTRUCTION.replace('{{nai_request}}', () => request.trim());
+    instruction = c.substituteParams(instruction);
 
     const toast = toastr.info('LLM описывает сцену…', 'NovelAI', { timeOut: 0, extendedTimeOut: 0 });
     let scene;
@@ -534,12 +543,15 @@ function registerCommands() {
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'naiscene',
-        helpString: 'LLM описывает текущую сцену (с разбивкой по персонажам) и генерирует картинку в NovelAI.',
+        helpString: 'LLM описывает текущую сцену (с разбивкой по персонажам) и генерирует картинку в NovelAI. С текстом рисует то, что попросили, по данным из истории: <code>/naiscene наш дом снаружи</code>.',
         returns: 'URL картинок через запятую',
         namedArgumentList: commonArgs(),
-        callback: async (args) => {
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({ description: 'что нарисовать вместо текущей сцены', typeList: [ARGUMENT_TYPE.STRING], isRequired: false }),
+        ],
+        callback: async (args, text) => {
             try {
-                return (await generateScene({ count: args.count, orientation: args.orientation })).join(', ');
+                return (await generateScene({ count: args.count, orientation: args.orientation, request: String(text ?? '') })).join(', ');
             } catch (err) {
                 toastr.error(String(err.message ?? err), 'NovelAI');
                 return '';
@@ -808,15 +820,21 @@ function debounce(fn, ms) {
     return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-function addWandButton() {
-    const item = document.createElement('div');
-    item.className = 'list-group-item flex-container flexGap5 interactable';
-    item.tabIndex = 0;
-    item.innerHTML = '<div class="fa-solid fa-image extensionsMenuExtensionButton"></div>NAI: нарисовать сцену';
-    item.addEventListener('click', () => {
-        generateScene().catch(err => toastr.error(String(err.message ?? err), 'NovelAI'));
+function addWandButtons() {
+    const add = (icon, label, onClick) => {
+        const item = document.createElement('div');
+        item.className = 'list-group-item flex-container flexGap5 interactable';
+        item.tabIndex = 0;
+        item.innerHTML = `<div class="fa-solid ${icon} extensionsMenuExtensionButton"></div>${label}`;
+        item.addEventListener('click', () => onClick().catch(err => toastr.error(String(err.message ?? err), 'NovelAI')));
+        document.getElementById('extensionsMenu')?.append(item);
+    };
+    add('fa-image', 'NAI: нарисовать сцену', () => generateScene());
+    add('fa-pen-to-square', 'NAI: нарисовать по запросу', async () => {
+        const c = ctx();
+        const request = await c.callGenericPopup('Что нарисовать? LLM возьмёт детали из истории.', c.POPUP_TYPE.INPUT, '', { rows: 2 });
+        if (typeof request === 'string' && request.trim()) await generateScene({ request });
     });
-    document.getElementById('extensionsMenu')?.append(item);
 }
 
 async function checkPlugin() {
@@ -839,7 +857,7 @@ jQuery(async () => {
     const html = await (await fetch(FOLDER_URL + 'settings.html')).text();
     $('#extensions_settings2').append(html);
     bindSettings();
-    addWandButton();
+    addWandButtons();
     await checkPlugin();
     registerCommands();
     registerTool();
