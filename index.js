@@ -12,13 +12,98 @@ const ORIENTATIONS = {
     square: { width: 1024, height: 1024 },
 };
 
+const APPEARANCE_SCOPE = 'species, hair color and style, eye color, skin, body type, notable permanent features (fur color and markings, animal ears, tail, horns, scars, tattoos). No clothing, pose or expression.';
+
 const DEFAULT_SCENE_INSTRUCTION = `[Pause the roleplay. Describe what is happening right now in the story as a NovelAI image prompt. Reply ONLY with a JSON object, no other text:
-{"prompt": "...", "characters": [{"name": "...", "prompt": "...", "position": ""}]}
+{"prompt": "...", "characters": [{"name": "...", "appearance": "...", "prompt": "...", "position": ""}]}
 Rules:
-- "prompt": comma-separated Danbooru tags for the whole picture: people count (1girl, 1boy, 2girls, 1girl 1boy, ...), location, background, lighting, time of day, camera angle and framing, mood. Do not describe any character's looks here.
-- "characters": every visible character, max 6. "name" is the exact name for known characters ({{nai_names}}), otherwise a short label. "prompt" is Danbooru tags for that character only: gender tag (girl, boy, ...), pose, action, facial expression, clothing; add hair/eyes/body tags only for characters that are not known.
+- "prompt": comma-separated Danbooru tags for the whole picture: people count (1girl, 1boy, 2girls, ...), location, background, lighting, time of day, camera angle and framing, mood. Do not describe any character's looks here.
+- "characters": every visible character, max 6. "name" is the character's exact name, otherwise a short label.
+- "appearance": Danbooru tags for how the character looks: ${APPEARANCE_SCOPE} Take them from the character description, even if recent messages do not mention them. Leave "" for characters whose appearance is already saved: {{nai_names}}.
+- "prompt" inside characters: Danbooru tags for that character in this scene: gender tag (girl, boy, ...), pose, action, facial expression, clothing.
 - "position": grid cell from A1 to E5 (A..E = left to right, 1..5 = top to bottom), or "" to let the model decide.
+- Do not add art style, medium or artist tags (anime, realistic, sketch, watercolor, chibi, ...): the style is set separately.
 - Tags only, English, no sentences.]`;
+
+const EXTRACT_SYSTEM_PROMPT = `Convert the character description into NovelAI appearance tags. Reply with one line of comma-separated English Danbooru tags and nothing else. Tags to include: ${APPEARANCE_SCOPE}`;
+
+const UPDATE_INSTRUCTION = `[Pause the roleplay. Saved appearance tags of {{nai_name}}: {{nai_tags}}
+Check the story for changes to how {{nai_name}} looks now (haircut, hair color, body, new scars, ...). Reply ONLY with the full updated list of comma-separated English Danbooru tags, no other text: ${APPEARANCE_SCOPE}
+If nothing changed, reply with the saved tags unchanged.]`;
+
+const NPC_SCAN_INSTRUCTION = `[Pause the roleplay. List every character in the story so far except: {{nai_names}}. Reply ONLY with a JSON object, no other text:
+{"characters": [{"name": "...", "appearance": "..."}]}
+"name" is the character's exact name. "appearance" is comma-separated English Danbooru tags: ${APPEARANCE_SCOPE}
+Use only what the story says. Skip characters whose looks are not described. Reply {"characters": []} if there is nobody.]`;
+
+/**
+ * Checked on V5 Full. The "основные" groups held their style across 8-16 different scenes each;
+ * the rest were checked on one scene. Furry presets use e621 medium tags and turn on furry mode.
+ */
+const STYLE_PRESETS = {
+    'Аниме: основные': {
+        furry: false,
+        styles: {
+            'Иллюстрация': 'illustration, official art, detailed background, soft lighting, depth of field, vibrant colors',
+            'Полуреализм': 'semi-realistic, painterly, realistic shading, dramatic lighting, detailed',
+            'Аниме (cel)': 'anime screencap, anime coloring, cel shading, clean lineart',
+        },
+    },
+    'Фурри: основные': {
+        furry: true,
+        styles: {
+            'Скетч': 'sketch, graphite (artwork), traditional media (artwork), rough lines, partially colored',
+        },
+    },
+    'Аниме: прочие': {
+        furry: false,
+        styles: {
+            'Game CG': 'game cg, visual novel, detailed background, soft shading, bloom',
+            'Ретро 90-х': '1990s (style), retro artstyle, anime screencap, cel shading',
+            'Масло': 'oil painting (medium), impasto, painterly, traditional media, textured',
+            'Акварель': 'watercolor (medium), traditional media, soft colors, paper texture',
+            'Флэт': 'flat color, limited palette, thick outlines, simple shading, minimalism',
+            'Скетч': 'sketch, pencil (medium), graphite (medium), traditional media, rough lines, partially colored',
+            'Пастель': 'pastel colors, soft focus, light particles, dreamy, glowing, bloom',
+        },
+    },
+    'Фурри: прочие': {
+        furry: true,
+        styles: {
+            'Мультяшный': 'toony, cel shading, thick outlines, bright colors',
+            'Цифровая живопись': 'digital painting (artwork), detailed fur, soft lighting, painterly, depth of field',
+            'Реалистичный мех': 'realistic, detailed fur, fur texture, dramatic lighting, detailed background',
+            'Аниме (kemono)': 'anime style, kemono, cel shading, clean lineart, anime coloring',
+            'Акварель': 'watercolor (artwork), traditional media (artwork), soft colors, paper texture',
+            'Флэт': 'flat colors, limited palette, thick outlines, simple shading, minimalist',
+            '3D': '3d (artwork), 3d render, soft lighting, subsurface scattering, detailed fur',
+            'Масло': 'oil painting (artwork), impasto, painterly, traditional media (artwork), textured',
+        },
+    },
+    // Only artist tags that visibly changed the picture; ke-ta, akira toriyama, alphonse mucha, rukis, kilinah, chunie did not.
+    'Аниме: художники': {
+        furry: false,
+        styles: {
+            'kantoku': 'artist:kantoku',
+            'mika pikazo': 'artist:mika pikazo',
+            'fuzichoco': 'artist:fuzichoco',
+            'yoneyama mai': 'artist:yoneyama mai',
+            'wlop': 'artist:wlop',
+            'ciloranko': 'artist:ciloranko',
+            'ningen mame': 'artist:ningen mame',
+        },
+    },
+    'Фурри: художники': {
+        furry: true,
+        styles: {
+            'kenket': 'artist:kenket',
+            'hioshiru': 'artist:hioshiru',
+            'honovy': 'artist:honovy',
+            'wolfy-nail': 'artist:wolfy-nail',
+            'tsampikos': 'artist:tsampikos',
+        },
+    },
+};
 
 const DEFAULT_SETTINGS = {
     model: 'nai-diffusion-5-full',
@@ -32,6 +117,7 @@ const DEFAULT_SETTINGS = {
     seed: -1,
     variety_boost: false,
     decrisper: false,
+    style: STYLE_PRESETS['Аниме: основные'].styles['Иллюстрация'],
     quality: 'very aesthetic, masterpiece, no text',
     negative: 'lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page',
     tool_enabled: true,
@@ -55,6 +141,7 @@ function settings() {
 }
 
 const joinTags = (parts) => parts.map(p => String(p ?? '').trim().replace(/^,+|,+$/g, '').trim()).filter(Boolean).join(', ');
+const joinLines = (parts) => parts.map(p => String(p ?? '').trim()).filter(Boolean).join('\n\n');
 
 // ---------- characters ----------
 
@@ -75,21 +162,65 @@ function getChatCharacters() {
     }));
 }
 
+/** Appearance stored in the current chat: NPCs, and card characters whose looks changed in this story. */
+const getNpcs = () => ctx().chatMetadata?.[MODULE]?.npcs ?? {};
+
+async function writeNpcs(npcs) {
+    const c = ctx();
+    c.chatMetadata[MODULE] = { ...c.chatMetadata[MODULE], npcs };
+    await c.saveMetadata();
+    registerTool();
+}
+
+/** Chat entries go first: a change made in one story must win over the card and not touch other chats. */
 function getKnownCharacters() {
     const c = ctx();
     return [
+        ...Object.entries(getNpcs()).map(([name, tags]) => ({ index: null, name, tags })),
         ...getChatCharacters(),
         { index: null, name: c.name1, tags: settings().user_tags[c.name1] ?? '' },
     ];
 }
 
+const uniqueNames = (known) => [...new Set(known.map(k => k.name))];
+
+/** Names of characters whose appearance tags are filled in; the LLM must describe everyone else itself. */
+function savedAppearanceNames() {
+    const names = uniqueNames(getKnownCharacters().filter(k => k.tags.trim()));
+    return names.length ? names.join(', ') : 'nobody';
+}
+
+/** Only entries with tags: an empty card field must not hide a chat entry of the same name. */
 function findKnown(name) {
     if (!name) return null;
     const n = String(name).trim().toLowerCase();
-    const known = getKnownCharacters();
+    const known = getKnownCharacters().filter(k => k.tags.trim());
     return known.find(k => k.name.toLowerCase() === n)
         ?? known.find(k => k.name.toLowerCase().split(/\s+/)[0] === n.split(/\s+/)[0])
         ?? null;
+}
+
+/**
+ * Saves the appearance the LLM gave for named characters without saved tags.
+ * Later images reuse it even after the description leaves the context.
+ * @returns {Promise<number>} how many characters were added
+ */
+async function rememberAppearance(characters) {
+    if (!ctx().getCurrentChatId()) return 0;
+    const npcs = { ...getNpcs() };
+    let added = 0;
+    for (const ch of characters) {
+        const name = String(ch?.name ?? '').trim();
+        const appearance = joinTags(String(ch?.appearance ?? '').split(','));
+        if (!name || !appearance || name in npcs || findKnown(name)) continue;
+        npcs[name] = appearance;
+        added++;
+    }
+    if (added) {
+        await writeNpcs(npcs);
+        renderNpcs();
+    }
+    return added;
 }
 
 /** "C3" / "left" / "" → {x, y} or {} */
@@ -108,7 +239,7 @@ function parsePosition(pos) {
 function resolveCharacter(ch) {
     const known = findKnown(ch.name);
     return {
-        prompt: joinTags([known?.tags, ch.prompt]),
+        prompt: joinTags([known ? known.tags : ch.appearance, ch.prompt]),
         negative: ch.negative ?? '',
         ...parsePosition(ch.position),
     };
@@ -134,7 +265,7 @@ async function callPlugin(path, body) {
 /**
  * @param {object} req
  * @param {string} req.prompt Base prompt (scene tags)
- * @param {{name?: string, prompt: string, negative?: string, position?: string}[]} [req.characters]
+ * @param {{name?: string, appearance?: string, prompt: string, negative?: string, position?: string}[]} [req.characters]
  * @param {number} [req.count]
  * @param {string} [req.orientation]
  * @param {string} [req.model]
@@ -152,7 +283,10 @@ async function generateImages(req) {
     const dims = ORIENTATIONS[req.orientation] ?? ORIENTATIONS[s.orientation] ?? ORIENTATIONS.portrait;
     const furry = req.furry ?? s.furry;
 
-    const prompt = joinTags([furry ? 'fur dataset' : '', req.prompt, s.quality]);
+    await rememberAppearance(req.characters ?? []);
+
+    // Style goes first: NovelAI gives earlier tags more weight.
+    const prompt = joinTags([furry ? 'fur dataset' : '', s.style, req.prompt, s.quality]);
     const characters = (req.characters ?? []).map(resolveCharacter).filter(ch => ch.prompt);
     const folder = c.groupId ? (c.groups.find(g => g.id == c.groupId)?.name ?? 'group') : (c.name2 || 'nai');
 
@@ -251,8 +385,7 @@ function parseSceneJson(text) {
 
 async function generateScene({ count, orientation } = {}) {
     const c = ctx();
-    const names = getKnownCharacters().map(k => k.name).join(', ');
-    const instruction = c.substituteParams(settings().scene_instruction.replaceAll('{{nai_names}}', names));
+    const instruction = c.substituteParams(settings().scene_instruction.replaceAll('{{nai_names}}', savedAppearanceNames()));
 
     const toast = toastr.info('LLM описывает сцену…', 'NovelAI', { timeOut: 0, extendedTimeOut: 0 });
     let scene;
@@ -264,6 +397,87 @@ async function generateScene({ count, orientation } = {}) {
     }
     console.debug('[nai-imagegen] scene', scene);
     return generateImages({ ...scene, count, orientation });
+}
+
+/** Asks the LLM for NPCs described in the chat so far, so their looks are saved before they leave the context. */
+async function scanNpcs() {
+    const c = ctx();
+    if (!c.getCurrentChatId()) throw new Error('Чат не открыт');
+    const names = uniqueNames(getKnownCharacters()).join(', ');
+    const instruction = c.substituteParams(NPC_SCAN_INSTRUCTION.replaceAll('{{nai_names}}', names));
+
+    const toast = toastr.info('LLM ищет NPC…', 'NovelAI', { timeOut: 0, extendedTimeOut: 0 });
+    let found;
+    try {
+        found = parseSceneJson(await c.generateQuietPrompt({ quietPrompt: instruction })).characters;
+    } finally {
+        toastr.clear(toast);
+    }
+    const added = await rememberAppearance(found);
+    toastr.success(`Новых NPC: ${added}`, 'NovelAI');
+}
+
+/** Turns a card or persona description into appearance tags. Uses generateRaw: the chat is not needed. */
+async function extractAppearance(description) {
+    if (!description.trim()) throw new Error('Описание пустое');
+    const toast = toastr.info('LLM читает описание…', 'NovelAI', { timeOut: 0, extendedTimeOut: 0 });
+    try {
+        return parseTagReply(await ctx().generateRaw({ systemPrompt: EXTRACT_SYSTEM_PROMPT, prompt: description }));
+    } finally {
+        toastr.clear(toast);
+    }
+}
+
+function parseTagReply(reply) {
+    const tags = joinTags(String(reply).replace(/```\w*/g, '').replace(/^\s*(appearance\s+)?tags\s*:/i, '').split(/[\n,]+/).map(t => t.trim().replace(/^["'`*\s-]+|["'`*\s]+$/g, '')));
+    if (!tags) throw new Error('LLM вернула пустой ответ');
+    return tags;
+}
+
+/**
+ * Asks the LLM how the character looks now, shows old and new tags, saves to the chat on confirm.
+ * The result goes to the chat, not the card: a new haircut belongs to this story only.
+ */
+async function updateAppearanceFromChat(name) {
+    const c = ctx();
+    const chatId = c.getCurrentChatId();
+    if (!chatId) throw new Error('Чат не открыт');
+    const current = getKnownCharacters().find(k => k.name === name && k.tags.trim())?.tags ?? '';
+    const instruction = c.substituteParams(UPDATE_INSTRUCTION
+        .replaceAll('{{nai_name}}', name)
+        .replaceAll('{{nai_tags}}', current || 'none'));
+
+    const toast = toastr.info(`LLM проверяет внешность: ${name}…`, 'NovelAI', { timeOut: 0, extendedTimeOut: 0 });
+    let tags;
+    try {
+        tags = parseTagReply(await c.generateQuietPrompt({ quietPrompt: instruction }));
+    } finally {
+        toastr.clear(toast);
+    }
+    if (tags === current) {
+        toastr.info(`${name}: внешность не изменилась`, 'NovelAI');
+        return;
+    }
+    if (!await confirmTagChange(name, current, tags)) return;
+    if (ctx().getCurrentChatId() !== chatId) throw new Error('Чат сменился, внешность не сохранена');
+    await writeNpcs({ ...getNpcs(), [name]: tags });
+    renderNpcs();
+}
+
+async function confirmTagChange(name, before, after) {
+    const c = ctx();
+    const line = (label, text) => {
+        const p = document.createElement('p');
+        const b = document.createElement('b');
+        b.textContent = label;
+        p.append(b, text);
+        return p;
+    };
+    const title = document.createElement('h3');
+    title.textContent = `${name}: сохранить в этом чате?`;
+    const body = document.createElement('div');
+    body.append(title, line('Было: ', before || '—'), line('Стало: ', after));
+    return await c.callGenericPopup(body, c.POPUP_TYPE.CONFIRM) === c.POPUP_RESULT.AFFIRMATIVE;
 }
 
 // ---------- slash commands ----------
@@ -336,6 +550,7 @@ function registerCommands() {
 
 // ---------- function tool ----------
 
+/** Re-run when the chat or saved tags change: ST sends the description as a fixed string. */
 function registerTool() {
     ctx().registerFunctionTool({
         name: 'NovelAIGenerateImage',
@@ -344,7 +559,9 @@ function registerTool() {
             'Draw image(s) with NovelAI (anime / furry illustration model).',
             'Use when the user asks for a picture, drawing, illustration, selfie or to show a scene, or asks for several images.',
             'Prompts are comma-separated Danbooru tags in English, not sentences.',
-            'Known characters\' appearance is added automatically when you put their exact name in characters[].name.',
+            `Appearance is added automatically for: ${savedAppearanceNames()} (put their exact name in characters[].name, leave appearance empty).`,
+            'For every other character fill characters[].appearance from their character description; it is saved and reused for later images.',
+            'Do not add art style, medium or artist tags: the style is set separately.',
         ].join(' '),
         parameters: Object.freeze({
             $schema: 'http://json-schema.org/draft-04/schema#',
@@ -361,7 +578,8 @@ function registerTool() {
                         type: 'object',
                         properties: {
                             name: { type: 'string', description: 'Exact character name if known, otherwise a short label.' },
-                            prompt: { type: 'string', description: 'Tags for this character only: gender tag, pose, action, expression, clothing; appearance tags only if the character is not known.' },
+                            appearance: { type: 'string', description: `Looks of this character: ${APPEARANCE_SCOPE} Empty if it is added automatically.` },
+                            prompt: { type: 'string', description: 'Tags for this character in this image: gender tag, pose, action, expression, clothing.' },
                             position: { type: 'string', description: 'Grid cell A1..E5 (A-E left to right, 1-5 top to bottom) or empty for auto.' },
                         },
                         required: ['prompt'],
@@ -400,6 +618,7 @@ const BINDINGS = {
     nai_ig_seed: 'seed',
     nai_ig_variety_boost: 'variety_boost',
     nai_ig_decrisper: 'decrisper',
+    nai_ig_style: 'style',
     nai_ig_quality: 'quality',
     nai_ig_negative: 'negative',
     nai_ig_tool: 'tool_enabled',
@@ -419,6 +638,23 @@ function bindSettings() {
             ctx().saveSettingsDebounced();
         });
     }
+
+    const stylePreset = document.getElementById('nai_ig_style_preset');
+    const styleTags = document.getElementById('nai_ig_style');
+    for (const [group, { styles }] of Object.entries(STYLE_PRESETS)) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group;
+        for (const name of Object.keys(styles)) optgroup.append(new Option(name, JSON.stringify([group, name])));
+        stylePreset.append(optgroup);
+    }
+    stylePreset.addEventListener('change', () => {
+        if (!stylePreset.value) return;
+        const [group, name] = JSON.parse(stylePreset.value);
+        s.style = styleTags.value = STYLE_PRESETS[group].styles[name];
+        s.furry = document.getElementById('nai_ig_furry').checked = STYLE_PRESETS[group].furry;
+        stylePreset.value = '';
+        ctx().saveSettingsDebounced();
+    });
 
     document.getElementById('nai_ig_btn_reset').addEventListener('click', () => {
         s.scene_instruction = DEFAULT_SCENE_INSTRUCTION;
@@ -444,22 +680,70 @@ function bindSettings() {
     const charSelect = document.getElementById('nai_ig_char_select');
     const charTags = document.getElementById('nai_ig_char_tags');
     const userTags = document.getElementById('nai_ig_user_tags');
+    const showError = (err) => toastr.error(String(err.message ?? err), 'NovelAI');
 
-    const saveCharTags = debounce(async () => {
-        const index = Number(charSelect.value);
-        if (!Number.isInteger(index) || charSelect.value === '') return;
+    const writeCharTags = async (index, tags) => {
         const current = ctx().characters[index]?.data?.extensions?.[CARD_FIELD] ?? {};
-        await ctx().writeExtensionField(index, CARD_FIELD, { ...current, tags: charTags.value });
-    }, 800);
+        await ctx().writeExtensionField(index, CARD_FIELD, { ...current, tags });
+        registerTool();
+    };
+    const writeUserTags = (name, tags) => {
+        s.user_tags[name] = tags;
+        ctx().saveSettingsDebounced();
+        registerTool();
+    };
+    const confirmReplace = async (current) => {
+        if (!current.trim()) return true;
+        const c = ctx();
+        return await c.callGenericPopup('Заменить текущие теги внешности?', c.POPUP_TYPE.CONFIRM) === c.POPUP_RESULT.AFFIRMATIVE;
+    };
 
     charSelect.addEventListener('change', () => {
         const ch = getChatCharacters().find(x => String(x.index) === charSelect.value);
         charTags.value = ch?.tags ?? '';
     });
-    charTags.addEventListener('input', saveCharTags);
-    userTags.addEventListener('input', () => {
-        s.user_tags[ctx().name1] = userTags.value;
-        ctx().saveSettingsDebounced();
+    charTags.addEventListener('input', debounce(() => {
+        const index = Number(charSelect.value);
+        if (!Number.isInteger(index) || charSelect.value === '') return;
+        writeCharTags(index, charTags.value);
+    }, 800));
+    userTags.addEventListener('input', debounce(() => writeUserTags(ctx().name1, userTags.value), 800));
+
+    // Index and name are captured before the LLM call: the user can switch character or persona while it runs.
+    document.getElementById('nai_ig_btn_char_extract').addEventListener('click', async () => {
+        const index = Number(charSelect.value);
+        const ch = ctx().characters[index];
+        if (charSelect.value === '' || !ch || !await confirmReplace(charTags.value)) return;
+        try {
+            const c = ctx();
+            const tags = await extractAppearance(c.substituteParams(joinLines([ch.description, ch.personality]), c.name1, ch.name));
+            await writeCharTags(index, tags);
+            if (charSelect.value === String(index)) charTags.value = tags;
+        } catch (err) {
+            showError(err);
+        }
+    });
+    document.getElementById('nai_ig_btn_user_extract').addEventListener('click', async () => {
+        const name = ctx().name1;
+        if (!await confirmReplace(userTags.value)) return;
+        try {
+            const tags = await extractAppearance(ctx().substituteParams('{{persona}}'));
+            writeUserTags(name, tags);
+            if (ctx().name1 === name) userTags.value = tags;
+        } catch (err) {
+            showError(err);
+        }
+    });
+    document.getElementById('nai_ig_btn_char_update').addEventListener('click', () => {
+        const ch = ctx().characters[Number(charSelect.value)];
+        if (charSelect.value === '' || !ch) return;
+        updateAppearanceFromChat(ch.name).catch(showError);
+    });
+    document.getElementById('nai_ig_btn_user_update').addEventListener('click', () => {
+        updateAppearanceFromChat(ctx().name1).catch(showError);
+    });
+    document.getElementById('nai_ig_btn_npc_scan').addEventListener('click', () => {
+        scanNpcs().catch(showError);
     });
 
     const refreshCharacters = () => {
@@ -469,9 +753,54 @@ function bindSettings() {
         charSelect.disabled = charTags.disabled = chars.length === 0;
         charTags.value = chars[0]?.tags ?? '';
         userTags.value = s.user_tags[ctx().name1] ?? '';
+        renderNpcs();
     };
     refreshCharacters();
-    ctx().eventSource.on(ctx().eventTypes.CHAT_CHANGED, refreshCharacters);
+    ctx().eventSource.on(ctx().eventTypes.CHAT_CHANGED, () => {
+        refreshCharacters();
+        registerTool();
+    });
+}
+
+function renderNpcs() {
+    const list = document.getElementById('nai_ig_npc_list');
+    if (!list) return;
+    list.innerHTML = '';
+    const chatId = ctx().getCurrentChatId();
+    for (const [name, tags] of Object.entries(getNpcs())) {
+        const label = document.createElement('b');
+        label.textContent = name;
+        const update = document.createElement('div');
+        update.className = 'menu_button fa-solid fa-rotate';
+        update.title = 'Обновить из чата';
+        update.addEventListener('click', () => {
+            updateAppearanceFromChat(name).catch(err => toastr.error(String(err.message ?? err), 'NovelAI'));
+        });
+        const del = document.createElement('div');
+        del.className = 'menu_button fa-solid fa-trash';
+        del.title = 'Забыть';
+        del.addEventListener('click', async () => {
+            const npcs = { ...getNpcs() };
+            delete npcs[name];
+            await writeNpcs(npcs);
+            renderNpcs();
+        });
+        const text = document.createElement('textarea');
+        text.className = 'text_pole';
+        text.rows = 2;
+        text.value = tags;
+        text.addEventListener('input', debounce(() => {
+            // Save fires 800 ms later; by then another chat may be open.
+            if (ctx().getCurrentChatId() !== chatId) return;
+            writeNpcs({ ...getNpcs(), [name]: text.value });
+        }, 800));
+
+        const header = document.createElement('div');
+        header.className = 'nai-ig-row nai-ig-npc-header';
+        header.append(label, update, del);
+        list.append(header, text);
+    }
+    if (!list.childElementCount) list.innerHTML = '<div class="nai-ig-hint">Пока никого.</div>';
 }
 
 function debounce(fn, ms) {

@@ -65,6 +65,13 @@
             <div class="nai-ig-hint">На Opus бесплатно: 1 картинка, ≤ 1024×1024 по площади, ≤ 28 steps.</div>
 
             <h4>Теги</h4>
+            <label>Стиль (в начало каждого промпта)
+                <select id="nai_ig_style_preset" class="text_pole">
+                    <option value="">Подставить пресет…</option>
+                </select>
+                <textarea id="nai_ig_style" class="text_pole" rows="2" placeholder="artist:..., anime coloring, ..."></textarea>
+            </label>
+            <div class="nai-ig-hint">Сильнее всего стиль держат теги художников: <code>artist:имя</code>, можно смешать 2–3.</div>
             <label>Quality-теги (в конец промпта)
                 <textarea id="nai_ig_quality" class="text_pole" rows="2"></textarea>
             </label>
@@ -78,9 +85,22 @@
                 <select id="nai_ig_char_select" class="text_pole"></select>
                 <textarea id="nai_ig_char_tags" class="text_pole" rows="2" placeholder="1girl, fox girl, orange hair, green eyes, ..."></textarea>
             </label>
+            <div class="nai-ig-row">
+                <div id="nai_ig_btn_char_extract" class="menu_button">Заполнить из описания карточки</div>
+                <div id="nai_ig_btn_char_update" class="menu_button" title="Результат сохранится в этом чате, карточка не меняется">Обновить из чата</div>
+            </div>
             <label>Ваша персона
                 <textarea id="nai_ig_user_tags" class="text_pole" rows="2" placeholder="1boy, black hair, ..."></textarea>
             </label>
+            <div class="nai-ig-row">
+                <div id="nai_ig_btn_user_extract" class="menu_button">Заполнить из описания персоны</div>
+                <div id="nai_ig_btn_user_update" class="menu_button" title="Результат сохранится в этом чате, настройки персоны не меняются">Обновить из чата</div>
+            </div>
+
+            <h4>Внешность в этом чате</h4>
+            <div class="nai-ig-hint">Важнее тегов карточки и персоны. NPC запоминаются сами, когда LLM впервые описывает их для картинки. «Обновить из чата» проверяет по истории, изменилась ли внешность (причёска, шрамы…), и после подтверждения сохраняет сюда. Удаление записи персонажа из карточки возвращает теги карточки.</div>
+            <div id="nai_ig_npc_list"></div>
+            <div id="nai_ig_btn_npc_scan" class="menu_button">Найти NPC в чате</div>
 
             <h4>Tool для LLM</h4>
             <div class="nai-ig-row">

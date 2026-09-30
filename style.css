@@ -26,3 +26,11 @@
 #nai_ig_settings h4 {
     margin: 10px 0 4px;
 }
+
+#nai_ig_settings .menu_button {
+    width: fit-content;
+}
+
+#nai_ig_settings .nai-ig-npc-header > b {
+    flex: 1;
+}
